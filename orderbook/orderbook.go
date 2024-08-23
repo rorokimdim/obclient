@@ -90,10 +90,16 @@ func compute(ob *OrderBook, uncross bool) (bestAsk Entry, bestBid Entry, spread 
 			bestBidSize := bestBid.Size
 			if bestBidSize > bestAskSize {
 				delete(ob.asks, bestAsk.Price)
-				ob.bids[bestBid.Price] = sizeMessageId{size: bestBidSize - bestAskSize, messageId: bestBidMessageId}
+				ob.bids[bestBid.Price] = sizeMessageId{
+					size:      bestBidSize - bestAskSize,
+					messageId: bestBidMessageId,
+				}
 			} else if bestBidSize < bestAskSize {
 				delete(ob.bids, bestBid.Price)
-				ob.asks[bestAsk.Price] = sizeMessageId{size: bestAskSize - bestBidSize, messageId: bestAskMessageId}
+				ob.asks[bestAsk.Price] = sizeMessageId{
+					size:      bestAskSize - bestBidSize,
+					messageId: bestAskMessageId,
+				}
 			} else {
 				delete(ob.asks, bestAsk.Price)
 				delete(ob.bids, bestBid.Price)
@@ -106,10 +112,6 @@ func compute(ob *OrderBook, uncross bool) (bestAsk Entry, bestBid Entry, spread 
 	}
 
 	return bestAsk, bestBid, spread
-}
-
-func computeSpread(bestAsk Entry, bestBid Entry) float64 {
-	return bestAsk.Price - bestBid.Price
 }
 
 func computeBestAsk(ob *OrderBook) Entry {
@@ -136,4 +138,8 @@ func computeBestBid(ob *OrderBook) Entry {
 	}
 
 	return best
+}
+
+func computeSpread(bestAsk Entry, bestBid Entry) float64 {
+	return bestAsk.Price - bestBid.Price
 }

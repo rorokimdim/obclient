@@ -12,13 +12,6 @@ import (
 	"github.com/rorokimdim/obclient/orderbook"
 )
 
-// See https://docs.dydx.exchange/api_integration-indexer/indexer_websocket
-//
-// testnet: wss://indexer.v4testnet.dydx.exchange/v4/ws
-// staging: wss://indexer.v4staging.dydx.exchange/v4/ws
-// real: wss://indexer.dydx.trade/v4/ws
-const defaultDydxURI = "wss://indexer.dydx.trade/v4/ws"
-
 func main() {
 	if len(os.Args) != 2 {
 		fmt.Printf("Syntax: %s pair-id\n", os.Args[0])
@@ -29,6 +22,7 @@ func main() {
 	}
 
 	pairId := os.Args[1]
+	config := readConfig()
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
@@ -36,13 +30,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 
-	dydxURI, ok := os.LookupEnv("DYDX_WSS_URL")
-	if !ok {
-		dydxURI = defaultDydxURI
-	}
-
-	uncross := true
-	d := dydx.New(dydxURI)
+	d := dydx.New(config.dydxURI)
 	ob := orderbook.New()
 
 	go func() {
@@ -54,7 +42,12 @@ func main() {
 				close(done)
 			}
 
-			updated := ob.Update(r.Message.MessageId, r.Message.Asks, r.Message.Bids, uncross)
+			updated := ob.Update(
+				r.Message.MessageId,
+				r.Message.Asks,
+				r.Message.Bids,
+				config.uncrossOrderBook,
+			)
 			if updated {
 				fmt.Println(ob.String())
 			}
@@ -76,3 +69,33 @@ func main() {
 		}
 	}
 }
+
+type Config struct {
+	dydxURI          string
+	uncrossOrderBook bool
+}
+
+func readConfig() Config {
+	dydxURI, ok := os.LookupEnv("DYDX_WSS_URL")
+	if !ok {
+		dydxURI = defaultDydxURI
+	}
+
+	uncrossOrderBook := true
+	v, ok := os.LookupEnv("UNCROSS_ORDER_BOOK")
+	if ok {
+		uncrossOrderBook = v == "1"
+	}
+
+	return Config{
+		dydxURI:          dydxURI,
+		uncrossOrderBook: uncrossOrderBook,
+	}
+}
+
+// See https://docs.dydx.exchange/api_integration-indexer/indexer_websocket
+//
+// testnet: wss://indexer.v4testnet.dydx.exchange/v4/ws
+// staging: wss://indexer.v4staging.dydx.exchange/v4/ws
+// real: wss://indexer.dydx.trade/v4/ws
+const defaultDydxURI = "wss://indexer.dydx.trade/v4/ws"
