@@ -2,7 +2,7 @@ Expected go version 1.22+.
 
 # Run
 ```bash
-go run .
+go run . ETH-USD
 ```
 
 # Build executable

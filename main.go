@@ -20,6 +20,16 @@ import (
 const defaultDydxURI = "wss://indexer.dydx.trade/v4/ws"
 
 func main() {
+	if len(os.Args) != 2 {
+		fmt.Printf("Syntax: %s pair-id\n", os.Args[0])
+		fmt.Println("\nExamples:")
+		fmt.Printf("%s ETH-USD\n", os.Args[0])
+		fmt.Printf("%s BTC-USD\n", os.Args[0])
+		return
+	}
+
+	pairId := os.Args[1]
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
@@ -35,7 +45,7 @@ func main() {
 	ob := orderbook.New()
 
 	go func() {
-		for r := range d.SubscribeToOrderBook(ctx, "ETH-USD") {
+		for r := range d.SubscribeToOrderBook(ctx, pairId) {
 			if r.Err != nil {
 				if r.Err != context.Canceled {
 					log.Printf("An error occurred: %v", r.Err)
