@@ -43,7 +43,7 @@ func main() {
 				close(done)
 			}
 
-			updated := ob.Update(r.Message.Asks, r.Message.Bids)
+			updated := ob.Update(r.Message.MessageId, r.Message.Asks, r.Message.Bids)
 			if updated {
 				fmt.Println(ob.String())
 			}
@@ -55,7 +55,7 @@ func main() {
 		case <-done:
 			return
 		case <-interrupt:
-			fmt.Println("Exiting. Please wait...")
+			log.Println("Exiting. Please wait...")
 			cancel()
 			select {
 			case <-done:

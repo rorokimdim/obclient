@@ -16,19 +16,22 @@ type DyDx struct {
 }
 
 type DyDxMessage struct {
-	Id       string
-	Type     string
-	Contents json.RawMessage
+	Id        string
+	Type      string
+	MessageId int `json:"message_id"`
+	Contents  json.RawMessage
 }
 
 type DyDxOrderBookContents struct {
-	Bids []orderbook.Entry
-	Asks []orderbook.Entry
+	MessageId int `json:"-"`
+	Bids      []orderbook.Entry
+	Asks      []orderbook.Entry
 }
 
 type DyDxOnUpdateMessageContents struct {
-	Bids [][2]string
-	Asks [][2]string
+	MessageId int `json:"-"`
+	Bids      [][2]string
+	Asks      [][2]string
 }
 
 func New(websocketURI string) *DyDx {
@@ -65,14 +68,14 @@ func (umsg DyDxOnUpdateMessageContents) toDyDxMessage() (DyDxOrderBookContents, 
 		return m, err
 	}
 
-	m.Asks = asks
-
 	bids, err := toEntries(umsg.Bids)
 	if err != nil {
 		return m, err
 	}
 
+	m.Asks = asks
 	m.Bids = bids
+	m.MessageId = umsg.MessageId
 
 	return m, nil
 }
@@ -153,10 +156,10 @@ func (dydx *DyDx) subscribe(conn *websocket.Conn, topic string, pairId string) e
 	return conn.WriteMessage(websocket.TextMessage, []byte(subscribeMessage))
 }
 
-func parseOnUpdateMessage(message []byte) (DyDxOrderBookContents, error) {
+func parseOnUpdateMessage(messageId int, message []byte) (DyDxOrderBookContents, error) {
 	m := DyDxOrderBookContents{}
 
-	onUpdateMessage := DyDxOnUpdateMessageContents{}
+	onUpdateMessage := DyDxOnUpdateMessageContents{MessageId: messageId}
 	if err := json.Unmarshal(message, &onUpdateMessage); err != nil {
 		return m, err
 	}
@@ -169,8 +172,8 @@ func parseOnUpdateMessage(message []byte) (DyDxOrderBookContents, error) {
 	return m, nil
 }
 
-func parseOnSubscribeMessage(message []byte) (DyDxOrderBookContents, error) {
-	m := DyDxOrderBookContents{}
+func parseOnSubscribeMessage(messageId int, message []byte) (DyDxOrderBookContents, error) {
+	m := DyDxOrderBookContents{MessageId: messageId}
 
 	if err := json.Unmarshal(message, &m); err != nil {
 		return m, err
@@ -189,9 +192,9 @@ func parseMessage(message []byte) (DyDxOrderBookContents, error) {
 	if m.Type == "connected" {
 		return DyDxOrderBookContents{}, nil
 	} else if m.Type == "subscribed" {
-		return parseOnSubscribeMessage(m.Contents)
+		return parseOnSubscribeMessage(m.MessageId, m.Contents)
 	} else if m.Type == "channel_data" {
-		return parseOnUpdateMessage(m.Contents)
+		return parseOnUpdateMessage(m.MessageId, m.Contents)
 	} else {
 		return DyDxOrderBookContents{}, fmt.Errorf("unexpected message type: %s", m.Type)
 	}
