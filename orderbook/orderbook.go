@@ -7,32 +7,6 @@ import (
 	"math"
 )
 
-type Price = float64
-type Size = float64
-
-type sizeMessageId struct {
-	size      Size
-	messageId int
-}
-
-type OrderBook struct {
-	bids    map[Price]sizeMessageId
-	asks    map[Price]sizeMessageId
-	bestBid Entry
-	bestAsk Entry
-}
-
-type Entry struct {
-	Price Price `json:"price,string"`
-	Size  Size  `json:"size,string"`
-}
-
-type OrderBookSummary struct {
-	BestBid Entry   `json:"best_bid"`
-	BestAsk Entry   `json:"best_ask"`
-	Spread  float64 `json:"spread"`
-}
-
 func New() *OrderBook {
 	return &OrderBook{
 		bids:    map[Price]sizeMessageId{},
@@ -59,7 +33,7 @@ func (ob *OrderBook) String() string {
 	return string(b)
 }
 
-func (ob *OrderBook) Update(messageId int, asks []Entry, bids []Entry) bool {
+func (ob *OrderBook) Update(messageId int, asks []Entry, bids []Entry, uncross bool) bool {
 	prevBestAsk := ob.bestAsk
 	prevBestBid := ob.bestBid
 	prevSpread := computeSpread(prevBestAsk, prevBestBid)
@@ -80,21 +54,32 @@ func (ob *OrderBook) Update(messageId int, asks []Entry, bids []Entry) bool {
 		}
 	}
 
-	bestAsk := computeBestAsk(ob)
-	bestBid := computeBestBid(ob)
-	spread := computeSpread(bestAsk, bestBid)
+	bestAsk, bestBid, spread := compute(ob, uncross)
+	ob.bestAsk = bestAsk
+	ob.bestBid = bestBid
 
-	//
+	bestAskChanged := ob.bestAsk != prevBestAsk
+	bestBidChanged := ob.bestBid != prevBestBid
+	spreadChanged := spread != prevSpread
+
+	return bestAskChanged || bestBidChanged || spreadChanged
+}
+
+func compute(ob *OrderBook, uncross bool) (bestAsk Entry, bestBid Entry, spread float64) {
+	bestAsk = computeBestAsk(ob)
+	bestBid = computeBestBid(ob)
+	spread = computeSpread(bestAsk, bestBid)
+
 	// Uncross
 	// See https://docs.dydx.exchange/api_integration-guides/how_to_uncross_orderbook#how-to-uncross
 	//
 	uncrossCount := 0
-	for spread <= 0 && len(ob.bids) > 0 && len(ob.asks) > 0 {
+	for uncross && spread <= 0 && len(ob.bids) > 0 && len(ob.asks) > 0 {
 		uncrossCount += 1
 		log.Printf("crossing detected; uncrossing count=%d", uncrossCount)
 
-		bestAskMessageId := ob.asks[ob.bestAsk.Price].messageId
-		bestBidMessageId := ob.bids[ob.bestBid.Price].messageId
+		bestAskMessageId := ob.asks[bestAsk.Price].messageId
+		bestBidMessageId := ob.bids[bestBid.Price].messageId
 
 		if bestBidMessageId < bestAskMessageId {
 			delete(ob.bids, bestBid.Price)
@@ -120,14 +105,7 @@ func (ob *OrderBook) Update(messageId int, asks []Entry, bids []Entry) bool {
 		spread = computeSpread(bestAsk, bestBid)
 	}
 
-	ob.bestAsk = bestAsk
-	ob.bestBid = bestBid
-	bestAskChanged := ob.bestAsk != prevBestAsk
-	bestBidChanged := ob.bestBid != prevBestBid
-	spreadChanged := spread != prevSpread
-
-	return bestAskChanged || bestBidChanged || spreadChanged
-
+	return bestAsk, bestBid, spread
 }
 
 func computeSpread(bestAsk Entry, bestBid Entry) float64 {

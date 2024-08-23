@@ -14,9 +14,9 @@ import (
 
 // See https://docs.dydx.exchange/api_integration-indexer/indexer_websocket
 //
-// testnet: 'wss://indexer.v4testnet.dydx.exchange/v4/ws'
+// testnet: wss://indexer.v4testnet.dydx.exchange/v4/ws
 // staging: wss://indexer.v4staging.dydx.exchange/v4/ws
-// real?: 'wss://indexer.dydx.trade/v4/ws'
+// real: wss://indexer.dydx.trade/v4/ws
 const defaultDydxURI = "wss://indexer.dydx.trade/v4/ws"
 
 func main() {
@@ -41,6 +41,7 @@ func main() {
 		dydxURI = defaultDydxURI
 	}
 
+	uncross := true
 	d := dydx.New(dydxURI)
 	ob := orderbook.New()
 
@@ -53,7 +54,7 @@ func main() {
 				close(done)
 			}
 
-			updated := ob.Update(r.Message.MessageId, r.Message.Asks, r.Message.Bids)
+			updated := ob.Update(r.Message.MessageId, r.Message.Asks, r.Message.Bids, uncross)
 			if updated {
 				fmt.Println(ob.String())
 			}

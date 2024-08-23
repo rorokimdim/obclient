@@ -11,78 +11,8 @@ import (
 	"github.com/rorokimdim/obclient/orderbook"
 )
 
-type DyDx struct {
-	websocketURI string
-}
-
-type DyDxMessage struct {
-	Id        string
-	Type      string
-	MessageId int `json:"message_id"`
-	Contents  json.RawMessage
-}
-
-type DyDxOrderBookContents struct {
-	MessageId int `json:"-"`
-	Bids      []orderbook.Entry
-	Asks      []orderbook.Entry
-}
-
-type DyDxOnUpdateMessageContents struct {
-	MessageId int `json:"-"`
-	Bids      [][2]string
-	Asks      [][2]string
-}
-
 func New(websocketURI string) *DyDx {
 	return &DyDx{websocketURI: websocketURI}
-}
-
-func (umsg DyDxOnUpdateMessageContents) toDyDxMessage() (DyDxOrderBookContents, error) {
-	m := DyDxOrderBookContents{}
-
-	toEntries := func(xs [][2]string) ([]orderbook.Entry, error) {
-		entries := []orderbook.Entry{}
-		for _, x := range xs {
-			entry := orderbook.Entry{}
-			price, err := strconv.ParseFloat(x[0], 64)
-			if err != nil {
-				return nil, fmt.Errorf("expected price to be a float; got %v", x[0])
-
-			}
-
-			size, err := strconv.ParseFloat(x[1], 64)
-			if err != nil {
-				return nil, fmt.Errorf("expected size to be a float; got %v", x[1])
-
-			}
-			entry.Price = price
-			entry.Size = size
-			entries = append(entries, entry)
-		}
-		return entries, nil
-	}
-
-	asks, err := toEntries(umsg.Asks)
-	if err != nil {
-		return m, err
-	}
-
-	bids, err := toEntries(umsg.Bids)
-	if err != nil {
-		return m, err
-	}
-
-	m.Asks = asks
-	m.Bids = bids
-	m.MessageId = umsg.MessageId
-
-	return m, nil
-}
-
-type DyDxOrderBookMessageResult struct {
-	Message DyDxOrderBookContents
-	Err     error
 }
 
 func (dydx *DyDx) SubscribeToOrderBook(ctx context.Context, pairId string) chan DyDxOrderBookMessageResult {
@@ -156,6 +86,24 @@ func (dydx *DyDx) subscribe(conn *websocket.Conn, topic string, pairId string) e
 	return conn.WriteMessage(websocket.TextMessage, []byte(subscribeMessage))
 }
 
+func parseMessage(message []byte) (DyDxOrderBookContents, error) {
+	m := DyDxMessage{}
+
+	if err := json.Unmarshal(message, &m); err != nil {
+		return DyDxOrderBookContents{}, err
+	}
+
+	if m.Type == "connected" {
+		return DyDxOrderBookContents{}, nil
+	} else if m.Type == "subscribed" {
+		return parseOnSubscribeMessage(m.MessageId, m.Contents)
+	} else if m.Type == "channel_data" {
+		return parseOnUpdateMessage(m.MessageId, m.Contents)
+	} else {
+		return DyDxOrderBookContents{}, fmt.Errorf("unexpected message type: %s", m.Type)
+	}
+}
+
 func parseOnUpdateMessage(messageId int, message []byte) (DyDxOrderBookContents, error) {
 	m := DyDxOrderBookContents{}
 
@@ -182,20 +130,44 @@ func parseOnSubscribeMessage(messageId int, message []byte) (DyDxOrderBookConten
 	return m, nil
 }
 
-func parseMessage(message []byte) (DyDxOrderBookContents, error) {
-	m := DyDxMessage{}
+func (umsg DyDxOnUpdateMessageContents) toDyDxMessage() (DyDxOrderBookContents, error) {
+	m := DyDxOrderBookContents{}
 
-	if err := json.Unmarshal(message, &m); err != nil {
-		return DyDxOrderBookContents{}, err
+	toEntries := func(xs [][2]string) ([]orderbook.Entry, error) {
+		entries := []orderbook.Entry{}
+		for _, x := range xs {
+			entry := orderbook.Entry{}
+			price, err := strconv.ParseFloat(x[0], 64)
+			if err != nil {
+				return nil, fmt.Errorf("expected price to be a float; got %v", x[0])
+
+			}
+
+			size, err := strconv.ParseFloat(x[1], 64)
+			if err != nil {
+				return nil, fmt.Errorf("expected size to be a float; got %v", x[1])
+
+			}
+			entry.Price = price
+			entry.Size = size
+			entries = append(entries, entry)
+		}
+		return entries, nil
 	}
 
-	if m.Type == "connected" {
-		return DyDxOrderBookContents{}, nil
-	} else if m.Type == "subscribed" {
-		return parseOnSubscribeMessage(m.MessageId, m.Contents)
-	} else if m.Type == "channel_data" {
-		return parseOnUpdateMessage(m.MessageId, m.Contents)
-	} else {
-		return DyDxOrderBookContents{}, fmt.Errorf("unexpected message type: %s", m.Type)
+	asks, err := toEntries(umsg.Asks)
+	if err != nil {
+		return m, err
 	}
+
+	bids, err := toEntries(umsg.Bids)
+	if err != nil {
+		return m, err
+	}
+
+	m.Asks = asks
+	m.Bids = bids
+	m.MessageId = umsg.MessageId
+
+	return m, nil
 }
